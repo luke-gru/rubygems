@@ -58,6 +58,7 @@ class Gem::Dependency
     @requirement = Gem::Requirement.create requirements
     @type        = type
     @prerelease  = false
+    @to_spec = nil
 
     # This is for Marshal backwards compatibility. See the comments in
     # +requirement+ for the dirty details.
@@ -200,7 +201,7 @@ class Gem::Dependency
 
     version = reqs.first.last
 
-    requirement.satisfied_by? version
+    requirement.satisfied_by?(version)
   end
 
   # DOC: this method needs either documented or :nodoc'd
@@ -251,17 +252,16 @@ class Gem::Dependency
 
   def matching_specs platform_only = false
     matches = Gem::Specification.find_all { |spec|
-      self.name === spec.name and # TODO: == instead of ===
-        requirement.satisfied_by? spec.version
+      matches_spec?(spec)
     }
 
     if platform_only
       matches.reject! { |spec|
-        not Gem::Platform.match spec.platform
+        not Gem::Platform.match(spec.platform)
       }
     end
 
-    matches = matches.sort_by { |s| s.sort_obj } # HACK: shouldn't be needed
+    matches.sort_by { |s| s.sort_obj } # HACK: shouldn't be needed
   end
 
   ##
@@ -305,7 +305,11 @@ class Gem::Dependency
 
   def to_spec
     matches = self.to_specs
-
-    matches.find { |spec| spec.activated? } or matches.last
+    match = matches.find { |spec| spec.activated? }
+    if match
+      return @to_spec = match
+    else
+      matches.last
+    end
   end
 end

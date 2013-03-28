@@ -634,8 +634,7 @@ class Gem::Specification
     end
 
     def each_default(&block) # :nodoc:
-      each_spec([default_specifications_dir],
-                &block)
+      each_spec([default_specifications_dir], &block)
     end
 
     def each_normal(&block) # :nodoc:
@@ -670,8 +669,11 @@ class Gem::Specification
   def self._resort! # :nodoc:
     @@all.sort! { |a, b|
       names = a.name <=> b.name
-      next names if names.nonzero?
-      b.version <=> a.version
+      if names.zero?
+        b.version <=> a.version
+      else
+        names
+      end
     }
   end
 
@@ -836,7 +838,7 @@ class Gem::Specification
 
   def self.find_by_path path
     self.find { |spec|
-      spec.contains_requirable_file? path
+      spec.contains_requirable_file?(path)
     }
   end
 
@@ -846,7 +848,7 @@ class Gem::Specification
 
   def self.find_inactive_by_path path
     self.find { |spec|
-      spec.contains_requirable_file? path unless spec.activated?
+      spec.contains_requirable_file?(path) unless spec.activated?
     }
   end
 
@@ -855,9 +857,12 @@ class Gem::Specification
 
   def self.find_in_unresolved path
     # TODO: do we need these?? Kill it
-    specs = unresolved_deps.values.map { |dep| dep.to_specs }.flatten
+    specs = unresolved_deps.values.map! { |dep| dep.to_specs }.flatten!
+    fast_specs = specs.select { |spec| spec.name == path }
 
-    specs.find_all { |spec| spec.contains_requirable_file? path }
+    specs = specs.find_all { |spec| spec.contains_requirable_file?(path) }
+    specs = specs -= fast_specs
+    fast_specs + specs
   end
 
   ##
@@ -865,18 +870,18 @@ class Gem::Specification
   # specs that contain the file matching +path+.
 
   def self.find_in_unresolved_tree path
-    specs = unresolved_deps.values.map { |dep| dep.to_specs }.flatten
+    specs = unresolved_deps.values.map! { |dep| dep.to_specs }.flatten!
 
     specs.reverse_each do |spec|
       trails = []
       spec.traverse do |from_spec, dep, to_spec, trail|
         next unless to_spec.conflicts.empty?
-        trails << trail if to_spec.contains_requirable_file? path
+        trails << trail if to_spec.contains_requirable_file?(path)
       end
 
       next if trails.empty?
 
-      return trails.map(&:reverse).sort.first.reverse
+      return trails.map!(&:reverse!).sort!.first.reverse!
     end
 
     []
@@ -1041,7 +1046,7 @@ class Gem::Specification
     @@all = nil
     unresolved = unresolved_deps
     unless unresolved.empty? then
-      w = "W" + "ARN"
+      w = "W" + "ARN" # no highlight
       warn "#{w}: Unresolved specs during Gem::Specification.reset:"
       unresolved.values.each do |dep|
         warn "      #{dep}"
@@ -1303,22 +1308,22 @@ class Gem::Specification
   # a full path.
 
   def bin_dir
-    @bin_dir ||= File.join gem_dir, bindir # TODO: this is unfortunate
+    @bin_dir ||= File.join(gem_dir, bindir) # TODO: this is unfortunate
   end
 
   ##
   # Returns the full path to an executable named +name+ in this gem.
 
   def bin_file name
-    File.join bin_dir, name
+    File.join(bin_dir, name)
   end
 
   ##
   # Returns the build_args used to install the gem
 
   def build_args
-    if File.exists? build_info_file
-      File.readlines(build_info_file).map { |x| x.strip }
+    if File.exists?(build_info_file)
+      File.readlines(build_info_file).map! { |x| x.strip }
     else
       []
     end
@@ -2297,9 +2302,8 @@ class Gem::Specification
     trail = trail + [self]
     runtime_dependencies.each do |dep|
       dep.to_specs.each do |dep_spec|
-        block[self, dep, dep_spec, trail + [dep_spec]]
-        dep_spec.traverse(trail, &block) unless
-          trail.map(&:name).include? dep_spec.name
+        block.call(self, dep, dep_spec, trail + [dep_spec])
+        dep_spec.traverse(trail, &block) unless trail.map(&:name).include?(dep_spec.name)
       end
     end
   end
@@ -2435,8 +2439,6 @@ class Gem::Specification
     validate_permissions
 
     # reject lazy developers:
-
-    # FIX: Doesn't this just evaluate to "FIXME" or "TODO"?
     lazy = '"FIxxxXME" or "TOxxxDO"'.gsub(/xxx/, '')
 
     unless authors.grep(/FI XME|TO DO/x).empty? then

@@ -52,14 +52,14 @@ module Kernel
     # TODO request access to the C implementation of this to speed up RubyGems
 
     spec = Gem::Specification.find { |s|
-      s.activated? and s.contains_requirable_file? path
+      s.activated? and s.contains_requirable_file?(path)
     }
 
     return gem_original_require(path) if spec
 
     # Attempt to find +path+ in any unresolved gems...
 
-    found_specs = Gem::Specification.find_in_unresolved path
+    found_specs = Gem::Specification.find_in_unresolved(path)
 
     # If there are no directly unresolved gems, then try and find +path+
     # in any gems that are available via the currently unresolved gems.
@@ -72,7 +72,7 @@ module Kernel
     # it's a dependency of c.
     #
     if found_specs.empty? then
-      found_specs = Gem::Specification.find_in_unresolved_tree path
+      found_specs = Gem::Specification.find_in_unresolved_tree(path)
 
       found_specs.each do |found_spec|
         found_spec.activate
